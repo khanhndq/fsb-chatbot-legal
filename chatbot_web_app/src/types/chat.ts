@@ -1,4 +1,4 @@
-export type LLMModelType = 'openai' | 'claude' | 'gemini';
+export type LLMModelType = 'openai' | 'claude' | 'gemini' | 'qwen';
 
 export interface LLMModelInfo {
   id: LLMModelType;
@@ -42,6 +42,7 @@ export interface ChatSession {
   created_at: Date;
   last_activity?: Date;
   message_count?: number;
+  preview?: string;
 }
 
 export interface ChatHistoryResponse {
@@ -59,6 +60,7 @@ export interface SendMessageResponse {
   userMessage: string;
   botResponse: string;
   timestamp: Date;
+  sourceLinks?: SourceLink[];
 }
 
 export interface HealthResponse {

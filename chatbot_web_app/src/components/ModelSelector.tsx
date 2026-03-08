@@ -12,6 +12,7 @@ const MODEL_ICONS: Record<LLMModelType, string> = {
   openai: 'smart_toy',
   claude: 'psychology',
   gemini: 'auto_awesome',
+  qwen: 'hub',
 };
 
 const ModelSelector: React.FC<ModelSelectorProps> = ({

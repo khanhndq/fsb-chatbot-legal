@@ -71,8 +71,25 @@ export interface GeminiConfig {
   temperature: number;
 }
 
+export interface QwenConfig {
+  apiKey: string;
+  model: string;
+  maxTokens: number;
+  temperature: number;
+}
+
 export interface LLMConfig {
-  defaultProvider: 'openai' | 'claude' | 'gemini';
+  defaultProvider: 'openai' | 'claude' | 'gemini' | 'qwen';
+}
+
+export interface EmbeddingConfig {
+  model: string;
+  dimensions: number;
+}
+
+export interface PineconeConfig {
+  apiKey: string;
+  index: string;
 }
 
 export interface Config {
@@ -83,7 +100,10 @@ export interface Config {
   openai: OpenAIConfig;
   claude: ClaudeConfig;
   gemini: GeminiConfig;
+  qwen: QwenConfig;
   llm: LLMConfig;
+  embedding: EmbeddingConfig;
+  pinecone: PineconeConfig;
 }
 
 /**
@@ -144,8 +164,43 @@ export const config: Config = {
     temperature: parseFloat(process.env.GEMINI_TEMPERATURE || '0.7'),
   },
 
+  // Qwen (HuggingFace) Configuration
+  qwen: {
+    apiKey: process.env.HF_API_KEY || '',
+    model: process.env.QWEN_MODEL || 'Qwen/Qwen2.5-7B-Instruct',
+    maxTokens: parseInt(process.env.QWEN_MAX_TOKENS || '1024', 10),
+    temperature: parseFloat(process.env.QWEN_TEMPERATURE || '0.7'),
+  },
+
   // LLM Provider Selection
   llm: {
-    defaultProvider: (process.env.DEFAULT_LLM_PROVIDER || 'openai') as 'openai' | 'claude' | 'gemini',
+    defaultProvider: (process.env.DEFAULT_LLM_PROVIDER || 'openai') as 'openai' | 'claude' | 'gemini' | 'qwen',
+  },
+
+  // Embedding Configuration (OpenAI — always required for RAG regardless of LLM provider)
+  embedding: {
+    model: process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
+    dimensions: parseInt(process.env.EMBEDDING_DIMENSIONS || '1536', 10),
+  },
+
+  // Pinecone (Vector Database) Configuration
+  pinecone: {
+    apiKey: process.env.PINECONE_API_KEY || '',
+    index: process.env.PINECONE_INDEX || 'chatbot-vn-legal',
   },
 };
+
+/**
+ * Validate that RAG dependencies are correctly configured.
+ * Call this at server startup to fail fast if OPENAI_API_KEY is missing
+ * while PINECONE_API_KEY is set (RAG would be broken at runtime).
+ */
+export function validateEmbeddingConfig(): void {
+  if (config.pinecone.apiKey && !config.openai.apiKey) {
+    console.warn(
+      '[Config] WARNING: PINECONE_API_KEY is set but OPENAI_API_KEY is missing. ' +
+      'RAG vector search requires OpenAI embeddings regardless of the selected LLM provider. ' +
+      'Set OPENAI_API_KEY to enable search_legal tool.'
+    );
+  }
+}

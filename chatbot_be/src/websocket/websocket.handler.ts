@@ -1,5 +1,4 @@
 import { Server, Socket } from "socket.io";
-import { v4 as uuidv4 } from "uuid";
 import { DatabaseService, Message } from "../services/database.service";
 import {
   ChatbotService,
@@ -48,8 +47,6 @@ export class WebSocketHandler {
    */
   private setupEventHandlers(): void {
     this.io.on("connection", (socket: Socket) => {
-      console.log(`🔌 New WebSocket connection: ${socket.id}`);
-
       this.handleConnection(socket);
     });
 
@@ -63,46 +60,43 @@ export class WebSocketHandler {
    * Handle new WebSocket connection
    */
   private handleConnection(socket: Socket): void {
-    // Generate session ID for new connection
-    const sessionId = uuidv4();
-
-    // Store connection mapping
-    this.activeConnections.set(socket.id, sessionId);
-
-    // Create chat session in database
-    this.databaseService.createChatSession(sessionId).catch((error) => {
-      console.error("❌ Failed to create chat session:", error);
-    });
-
-    socket.emit("session_created", { sessionId });
-
-    // Setup socket event handlers
-    this.setupSocketEventHandlers(socket, sessionId);
+    console.log(`🔌 New WebSocket connection: ${socket.id}`);
+    this.setupSocketEventHandlers(socket);
   }
 
   /**
    * Setup individual socket event handlers
    */
-  private setupSocketEventHandlers(socket: Socket, sessionId: string): void {
+  private setupSocketEventHandlers(socket: Socket): void {
     // Handle chat messages
     socket.on("chat_message", async (data: ChatEvent) => {
+      const currentSessionId = this.activeConnections.get(socket.id);
+      if (!currentSessionId) {
+        socket.emit("error", {
+          type: "error",
+          content: "No session joined. Please join a session first.",
+          timestamp: new Date(),
+        });
+        return;
+      }
+
       try {
         console.log(
-          `💬 Chat message received from session ${sessionId}: ${data.userMessage}`,
+          `💬 Chat message received from session ${currentSessionId}: ${data.userMessage}`,
         );
 
         // Check if streaming is requested
         if (data.stream) {
           await this.handleStreamingMessage(
             socket,
-            sessionId,
+            currentSessionId,
             data.userMessage,
             data.model,
           );
         } else {
           await this.handleNonStreamingMessage(
             socket,
-            sessionId,
+            currentSessionId,
             data.userMessage,
             data.model,
           );
@@ -115,7 +109,7 @@ export class WebSocketHandler {
           content:
             "Sorry, I encountered an error processing your message. Please try again.",
           timestamp: new Date(),
-          sessionId,
+          sessionId: currentSessionId,
         };
 
         socket.emit("error", errorMessage);
@@ -142,7 +136,12 @@ export class WebSocketHandler {
         // Load chat history
         const chatHistory =
           await this.databaseService.getChatHistory(sessionId);
-        socket.emit("chat_history", chatHistory);
+        const mappedHistory = chatHistory.map((row: any) => ({
+          ...row,
+          sourceLinks: row.source_links ?? undefined,
+          source_links: undefined,
+        }));
+        socket.emit("chat_history", mappedHistory);
 
         console.log(`👥 Client joined session: ${sessionId}`);
       } catch (error) {
@@ -207,6 +206,7 @@ export class WebSocketHandler {
       user_message: chatMessage.userMessage,
       bot_response: chatMessage.botResponse,
       timestamp: chatMessage.timestamp,
+      source_links: chatMessage.sourceLinks ?? null,
     };
 
     await this.databaseService.storeMessage(dbMessage);
@@ -290,6 +290,7 @@ export class WebSocketHandler {
       user_message: chatMessage.userMessage,
       bot_response: chatMessage.botResponse,
       timestamp: chatMessage.timestamp,
+      source_links: chatMessage.sourceLinks ?? null,
     };
 
     await this.databaseService.storeMessage(dbMessage);

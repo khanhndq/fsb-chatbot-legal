@@ -72,6 +72,7 @@ export const useChat = (sessionId?: string): UseChatReturn => {
         user_message: data.userMessage,
         bot_response: data.botResponse,
         timestamp: data.timestamp,
+        sourceLinks: data.sourceLinks,
       };
 
       setMessages(prev => [...prev, newMessage]);
@@ -127,7 +128,11 @@ export const useChat = (sessionId?: string): UseChatReturn => {
 
   const handleChatHistory = useCallback((history: any[]) => {
     if (history && history.length > 0) {
-      setMessages(history);
+      const mapped = history.map((msg: any) => ({
+        ...msg,
+        sourceLinks: msg.sourceLinks ?? msg.source_links ?? undefined,
+      }));
+      setMessages(mapped);
     }
   }, []);
 
@@ -253,7 +258,11 @@ export const useChat = (sessionId?: string): UseChatReturn => {
 
   useEffect(() => {
     if (chatHistory?.messages) {
-      setMessages(chatHistory.messages);
+      const mapped = chatHistory.messages.map((msg: any) => ({
+        ...msg,
+        sourceLinks: msg.sourceLinks ?? msg.source_links ?? undefined,
+      }));
+      setMessages(mapped);
     }
   }, [chatHistory]);
 

@@ -18,6 +18,14 @@ function getPinecone(): Pinecone {
   return pineconeClient;
 }
 
+/**
+ * OpenAI client used exclusively for generating query embeddings.
+ * This is intentionally independent of the active LLM provider (config.llm.defaultProvider).
+ * Reason: the Pinecone index was built with OpenAI text-embedding-3-small vectors.
+ * Using a different embedding model at query time would produce incompatible vectors
+ * and return low/meaningless similarity scores.
+ * OPENAI_API_KEY must be set even when using Claude, Gemini, or Qwen as the LLM.
+ */
 function getOpenAI(): OpenAI {
   if (!openaiClient) {
     const apiKey = process.env.OPENAI_API_KEY;

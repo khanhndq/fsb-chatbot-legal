@@ -57,12 +57,17 @@ router.get('/history/:sessionId', async (req: Request, res: Response) => {
     }
 
     const chatHistory = await databaseService.getChatHistory(sessionId, limit);
-    
+    const messages = chatHistory.map(row => ({
+      ...row,
+      sourceLinks: row.source_links ?? undefined,
+      source_links: undefined,
+    }));
+
     res.status(200).json({
       success: true,
       sessionId,
-      messageCount: chatHistory.length,
-      messages: chatHistory,
+      messageCount: messages.length,
+      messages,
       timestamp: new Date().toISOString()
     });
     return;
@@ -96,16 +101,13 @@ router.post('/send', async (req: Request, res: Response) => {
     const chatMessage = await chatbotService.processMessage(sessionId, message, model);
     
     // Store message in database
-    const dbMessage = {
+    await databaseService.storeMessage({
+      id: chatMessage.id,
       session_id: sessionId,
       user_message: chatMessage.userMessage,
       bot_response: chatMessage.botResponse,
-      timestamp: chatMessage.timestamp
-    };
-    
-    await databaseService.storeMessage({
-      ...dbMessage,
-      id: chatMessage.id
+      timestamp: chatMessage.timestamp,
+      source_links: chatMessage.sourceLinks ?? null,
     });
 
     res.status(200).json({
@@ -114,7 +116,8 @@ router.post('/send', async (req: Request, res: Response) => {
       sessionId,
       userMessage: chatMessage.userMessage,
       botResponse: chatMessage.botResponse,
-      timestamp: chatMessage.timestamp
+      timestamp: chatMessage.timestamp,
+      sourceLinks: chatMessage.sourceLinks,
     });
     return;
   } catch (error) {
@@ -239,12 +242,10 @@ router.delete('/sessions/:sessionId', async (req: Request, res: Response) => {
       });
     }
 
-    // Note: This would require implementing a delete method in DatabaseService
-    // For now, we'll just return a success message
+    await databaseService.deleteSession(sessionId);
     res.status(200).json({
       success: true,
       sessionId,
-      message: 'Session deletion not yet implemented',
       timestamp: new Date().toISOString()
     });
     return;
@@ -298,6 +299,7 @@ router.get('/models', async (req: Request, res: Response) => {
       openai: 'GPT-4o Mini',
       claude: 'Claude 3 Haiku',
       gemini: 'Gemini 1.5 Flash',
+      qwen: 'Qwen2.5-7B',
     };
 
     const models = available.map(p => ({

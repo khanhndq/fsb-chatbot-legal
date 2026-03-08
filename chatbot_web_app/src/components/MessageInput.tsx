@@ -60,7 +60,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
     <form onSubmit={handleSubmit} className="w-full">
       <div className="w-full relative group">
         <div className="absolute -inset-0.5 bg-gradient-to-r from-primary to-orange-400 rounded-3xl blur opacity-10 group-hover:opacity-25 transition duration-500"></div>
-        <div className="relative bg-white dark:bg-slate-900 border-2 border-primary/40 focus-within:border-primary rounded-2xl shadow-xl transition-all overflow-hidden flex flex-col">
+        <div className="relative bg-white dark:bg-slate-900 border-2 border-primary/40 focus-within:border-primary rounded-2xl shadow-xl transition-all flex flex-col">
           <textarea
             ref={textareaRef}
             value={message}

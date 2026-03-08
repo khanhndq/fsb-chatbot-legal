@@ -8,6 +8,9 @@ interface ChatProps {
   className?: string;
   onToggleDarkMode: () => void;
   isDarkMode: boolean;
+  onSidebarToggle?: () => void;
+  isSidebarOpen?: boolean;
+  onMessageSent?: () => void;
 }
 
 const Chat: React.FC<ChatProps> = ({
@@ -15,6 +18,9 @@ const Chat: React.FC<ChatProps> = ({
   className = "",
   onToggleDarkMode,
   isDarkMode,
+  onSidebarToggle,
+  isSidebarOpen,
+  onMessageSent,
 }) => {
   const {
     messages,
@@ -45,6 +51,12 @@ const Chat: React.FC<ChatProps> = ({
 
   const handleSuggestionClick = (suggestion: string) => {
     sendMessage(suggestion);
+    onMessageSent?.();
+  };
+
+  const handleSendMessage = (msg: string) => {
+    sendMessage(msg);
+    onMessageSent?.();
   };
 
   const suggestions = [
@@ -55,8 +67,21 @@ const Chat: React.FC<ChatProps> = ({
 
   return (
     <div
-      className={`flex flex-col min-h-screen text-slate-900 dark:text-slate-100 ${className}`}
+      className={`flex flex-col h-full text-slate-900 dark:text-slate-100 ${className}`}
     >
+      {/* Sidebar toggle button for mobile / when sidebar is closed */}
+      {(!isSidebarOpen || window.innerWidth < 768) && onSidebarToggle && (
+        <div className="absolute top-3 left-3 z-10">
+          <button
+            onClick={onSidebarToggle}
+            className="p-2 bg-white/80 dark:bg-slate-800/80 backdrop-blur rounded-lg shadow text-slate-600 dark:text-slate-300 hover:scale-110 transition-transform"
+            title="Mở thanh bên"
+          >
+            <span className="material-symbols-outlined text-xl leading-none">menu</span>
+          </button>
+        </div>
+      )}
+
       {/* Main Content */}
       {messages.length === 0 ? (
         // Welcome Screen
@@ -107,7 +132,7 @@ const Chat: React.FC<ChatProps> = ({
             {/* Message Input for Welcome Screen */}
             <div className="w-full">
               <MessageInput
-                onSendMessage={sendMessage}
+                onSendMessage={handleSendMessage}
                 disabled={!isConnected || connectionStatus === "error" || isStreaming}
                 placeholder={
                   isStreaming
@@ -124,8 +149,8 @@ const Chat: React.FC<ChatProps> = ({
         </main>
       ) : (
         // Chat Messages View
-        <main className="flex-grow flex flex-col px-4 py-6 relative overflow-hidden">
-          <div className="w-full max-w-4xl mx-auto flex-grow flex flex-col">
+        <main className="flex-grow flex flex-col px-4 py-6 relative overflow-hidden min-h-0">
+          <div className="w-full max-w-4xl mx-auto flex-grow flex flex-col min-h-0">
             {/* Messages Container */}
             <div
               ref={chatContainerRef}
@@ -157,7 +182,7 @@ const Chat: React.FC<ChatProps> = ({
 
             {/* Message Input for Chat View */}
             <MessageInput
-              onSendMessage={sendMessage}
+              onSendMessage={handleSendMessage}
               disabled={!isConnected || connectionStatus === "error" || isStreaming}
               placeholder={
                 isStreaming

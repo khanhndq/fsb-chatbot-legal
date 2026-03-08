@@ -87,6 +87,11 @@ class ApiService {
     return response.data;
   }
 
+  // Delete a session
+  async deleteSession(sessionId: string): Promise<void> {
+    await this.api.delete(`/api/messages/sessions/${sessionId}`);
+  }
+
   // Get service statistics
   async getStats(): Promise<any> {
     const response = await this.api.get('/api/messages/stats');

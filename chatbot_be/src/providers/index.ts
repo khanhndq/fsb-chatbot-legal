@@ -5,3 +5,4 @@ export * from './llm-factory';
 export * from './openai';
 export * from './claude';
 export * from './gemini';
+export * from './qwen';

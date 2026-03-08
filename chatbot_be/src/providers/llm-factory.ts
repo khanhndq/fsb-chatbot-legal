@@ -3,6 +3,7 @@ import { ILLMProvider } from './llm-provider.interface';
 import { OpenAIProvider } from './openai/openai.provider';
 import { ClaudeProvider } from './claude/claude.provider';
 import { GeminiProvider } from './gemini/gemini.provider';
+import { QwenProvider } from './qwen/qwen.provider';
 import { config } from '../common/config';
 
 export class LLMFactory {
@@ -47,6 +48,13 @@ export class LLMFactory {
           maxTokens: config.gemini.maxTokens,
           temperature: config.gemini.temperature,
         });
+      case 'qwen':
+        return new QwenProvider({
+          apiKey: config.qwen.apiKey,
+          model: config.qwen.model,
+          maxTokens: config.qwen.maxTokens,
+          temperature: config.qwen.temperature,
+        });
       default:
         throw new Error(`Unsupported LLM provider: ${type}`);
     }
@@ -58,6 +66,7 @@ export class LLMFactory {
     if (config.openai.apiKey) available.push('openai');
     if (config.claude.apiKey) available.push('claude');
     if (config.gemini.apiKey) available.push('gemini');
+    if (config.qwen.apiKey) available.push('qwen');
     return available;
   }
 

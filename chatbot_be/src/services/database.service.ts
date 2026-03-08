@@ -9,12 +9,15 @@ export interface Message {
   bot_response: string;
   timestamp: Date;
   created_at: Date;
+  source_links?: Array<{ title: string; url: string }> | null;
 }
 
 export interface ChatSession {
   id: string;
   created_at: Date;
   last_activity: Date;
+  message_count?: number;
+  preview?: string;
 }
 
 export class DatabaseService {
@@ -56,17 +59,18 @@ export class DatabaseService {
    */
   public async storeMessage(message: Omit<Message, 'created_at'>): Promise<void> {
     const query = `
-      INSERT INTO messages (id, session_id, user_message, bot_response, timestamp, created_at)
-      VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+      INSERT INTO messages (id, session_id, user_message, bot_response, timestamp, source_links, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
     `;
-    
+
     try {
       await this.pool.query(query, [
         message.id,
         message.session_id,
         message.user_message,
         message.bot_response,
-        message.timestamp
+        message.timestamp,
+        message.source_links ? JSON.stringify(message.source_links) : null,
       ]);
 
       // Update session last activity
@@ -82,7 +86,7 @@ export class DatabaseService {
    */
   public async getChatHistory(sessionId: string, limit: number = 50): Promise<Message[]> {
     const query = `
-      SELECT id, session_id, user_message, bot_response, timestamp, created_at
+      SELECT id, session_id, user_message, bot_response, timestamp, created_at, source_links
       FROM messages
       WHERE session_id = $1
       ORDER BY timestamp DESC
@@ -117,21 +121,41 @@ export class DatabaseService {
   }
 
   /**
-   * Get all active sessions
+   * Get all active sessions (last 30 days) with message count and preview
    */
   public async getActiveSessions(): Promise<ChatSession[]> {
     const query = `
-      SELECT id, created_at, last_activity
-      FROM chat_sessions
-      WHERE last_activity > CURRENT_TIMESTAMP - INTERVAL '24 hours'
-      ORDER BY last_activity DESC
+      SELECT
+        s.id,
+        s.created_at,
+        s.last_activity,
+        COUNT(m.id)::int AS message_count,
+        (SELECT user_message FROM messages WHERE session_id = s.id ORDER BY timestamp ASC LIMIT 1) AS preview
+      FROM chat_sessions s
+      LEFT JOIN messages m ON m.session_id = s.id
+      WHERE s.last_activity > NOW() - INTERVAL '30 days'
+      GROUP BY s.id, s.created_at, s.last_activity
+      ORDER BY s.created_at DESC
+      LIMIT 100
     `;
-    
+
     try {
       const result: QueryResult<ChatSession> = await this.pool.query(query);
       return result.rows;
     } catch (error) {
       console.error('❌ Failed to get active sessions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a chat session and all its messages
+   */
+  public async deleteSession(sessionId: string): Promise<void> {
+    try {
+      await this.pool.query('DELETE FROM chat_sessions WHERE id = $1', [sessionId]);
+    } catch (error) {
+      console.error('❌ Failed to delete session:', error);
       throw error;
     }
   }

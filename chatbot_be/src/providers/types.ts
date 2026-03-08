@@ -61,7 +61,7 @@ export interface LLMOptions {
   maxToolCalls?: number;
 }
 
-export type LLMProviderType = 'openai' | 'claude' | 'gemini';
+export type LLMProviderType = 'openai' | 'claude' | 'gemini' | 'qwen';
 
 export interface LLMProviderConfig {
   apiKey: string;

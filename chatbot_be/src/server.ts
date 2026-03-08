@@ -11,9 +11,13 @@ import { RedisService } from "./services/redis.service";
 import { ChatbotService } from "./services/chatbot.service";
 import { WebSocketHandler } from "./websocket/websocket.handler";
 import MessageRoutes from "./routes/message.routes";
+import { validateEmbeddingConfig } from "./common/config";
 
 // Load environment variables
 dotenv.config();
+
+// Fail-fast check: warn if PINECONE_API_KEY is set but OPENAI_API_KEY is missing
+validateEmbeddingConfig();
 
 export class App {
   private app: express.Application;
