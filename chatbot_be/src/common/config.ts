@@ -145,13 +145,13 @@ export const config: Config = {
     useTools: parseBoolean(process.env.USE_TOOLS, true),
     model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
     maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS || '1024', 10),
-    temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.7'),
+    temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.2'),
   },
 
   // Claude (Anthropic) Configuration
   claude: {
     apiKey: process.env.CLAUDE_API_KEY || '',
-    model: process.env.CLAUDE_MODEL || 'claude-3-haiku-20240307',
+    model: process.env.CLAUDE_MODEL || 'claude-haiku-4-5',
     maxTokens: parseInt(process.env.CLAUDE_MAX_TOKENS || '1024', 10),
     temperature: parseFloat(process.env.CLAUDE_TEMPERATURE || '0.7'),
   },

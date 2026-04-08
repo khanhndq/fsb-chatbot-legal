@@ -20,14 +20,15 @@ module.exports = {
   verbose: true,
   clearMocks: true,
   restoreMocks: true,
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1'
   },
   // Handle Socket.IO and other modules
   moduleFileExtensions: ['ts', 'js', 'json'],
   testPathIgnorePatterns: [
     '/node_modules/',
-    '/dist/'
+    '/dist/',
+    '<rootDir>/src/__tests__/setup.ts'
   ],
   // Coverage configuration
   coverageDirectory: 'coverage',

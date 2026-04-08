@@ -15,7 +15,7 @@ interface MessageInputProps {
 const MessageInput: React.FC<MessageInputProps> = ({
   onSendMessage,
   disabled = false,
-  placeholder = "Type your message...",
+  placeholder = "Nhập tin nhắn...",
   isWelcomeScreen = false,
   selectedModel,
   onModelChange,
@@ -85,7 +85,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
               <button
                 type="button"
                 className="p-2 text-slate-400 hover:text-primary transition-colors"
-                title="Attach file"
+                title="Đính kèm tệp"
                 disabled={disabled}
               >
                 <span className="material-symbols-outlined">attach_file</span>
@@ -93,7 +93,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
               <button
                 type="button"
                 className="p-2 text-slate-400 hover:text-primary transition-colors"
-                title="Add image"
+                title="Thêm hình ảnh"
                 disabled={disabled}
               >
                 <span className="material-symbols-outlined">image</span>
@@ -103,7 +103,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
               <button
                 type="button"
                 className="p-2 text-primary hover:bg-primary/10 rounded-full transition-colors"
-                title="Voice input"
+                title="Nhập giọng nói"
                 disabled={disabled}
               >
                 <span className="material-symbols-outlined text-2xl">mic</span>
@@ -112,7 +112,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
                 type="submit"
                 disabled={!message.trim() || disabled}
                 className="bg-primary text-white p-3 rounded-xl hover:bg-orange-600 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
-                title="Send message"
+                title="Gửi tin nhắn"
               >
                 <span className="material-symbols-outlined">send</span>
               </button>
@@ -120,11 +120,11 @@ const MessageInput: React.FC<MessageInputProps> = ({
           </div>
         </div>
       </div>
-      {!isWelcomeScreen && (
+      {/* {!isWelcomeScreen && (
         <div className="mt-2 text-xs text-slate-500 dark:text-slate-400 text-center">
-          Press Enter to send, Shift+Enter for new line
+          Nhấn Enter để gửi, Shift+Enter để xuống dòng
         </div>
-      )}
+      )} */}
     </form>
   );
 };

@@ -47,7 +47,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-primary hover:text-primary dark:hover:border-primary dark:hover:text-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        title="Select AI model"
+        title="Chọn mô hình AI"
       >
         <span className="material-symbols-outlined text-base">
           {MODEL_ICONS[selectedModel] || 'smart_toy'}
@@ -62,7 +62,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
         <div className="absolute bottom-full left-0 mb-2 w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200">
           <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700">
             <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-              AI Model
+              Mô hình AI
             </span>
           </div>
           {availableModels.map((model) => (

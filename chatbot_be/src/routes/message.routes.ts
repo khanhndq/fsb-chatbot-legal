@@ -297,8 +297,8 @@ router.get('/models', async (req: Request, res: Response) => {
     const available = LLMFactory.getAvailableProviders();
     const modelMap: Record<string, string> = {
       openai: 'GPT-4o Mini',
-      claude: 'Claude 3 Haiku',
-      gemini: 'Gemini 1.5 Flash',
+      claude: 'Claude Haiku 4.5',
+      gemini: 'Gemini 2.5 Flash',
       qwen: 'Qwen2.5-7B',
     };
 

@@ -2,6 +2,7 @@
 .mcp.json
 .claude/
 CLAUDE.md
+AGENTS.md
 PRODUCT_SPEC.md
 
 chatbot-indexing/dataset/json
@@ -28,5 +29,8 @@ build/
 test
 docs
 
-# Worktrees
-.worktrees/
+# Agents
+.agents/
+
+# Theris
+theris/

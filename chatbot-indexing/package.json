@@ -8,6 +8,7 @@
     "start": "ts-node src/index.ts",
     "index": "ts-node src/index.ts",
     "index:dry-run": "ts-node src/index.ts --dry-run",
+    "analyze:chunks": "ts-node src/analyze-chunks.ts",
     "test": "jest"
   },
   "dependencies": {

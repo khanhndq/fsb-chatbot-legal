@@ -25,7 +25,7 @@ export class GeminiProvider extends BaseLLMProvider {
       throw new Error('Gemini API key is required');
     }
     this.genAI = new GoogleGenerativeAI(providerConfig.apiKey);
-    this.model = providerConfig.model || 'gemini-1.5-flash';
+    this.model = providerConfig.model || 'gemini-2.5-flash';
     this.maxTokens = providerConfig.maxTokens || 1024;
     this.temperature = providerConfig.temperature || 0.7;
     console.log(`✅ Gemini provider initialized with model: ${this.model}`);

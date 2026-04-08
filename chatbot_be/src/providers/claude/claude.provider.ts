@@ -15,7 +15,7 @@ export class ClaudeProvider extends BaseLLMProvider {
       throw new Error('Claude API key is required');
     }
     this.client = new Anthropic({ apiKey: providerConfig.apiKey });
-    this.model = providerConfig.model || 'claude-3-haiku-20240307';
+    this.model = providerConfig.model || 'claude-haiku-4-5';
     this.maxTokens = providerConfig.maxTokens || 1024;
     this.temperature = providerConfig.temperature || 0.7;
     console.log(`✅ Claude provider initialized with model: ${this.model}`);

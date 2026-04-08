@@ -1,5 +1,6 @@
 import { createClient, RedisClientType } from 'redis';
 import { config } from '../common/config';
+import { ChatHistoryMessage, normalizeSessionContext } from './session-history';
 
 export interface ChatbotResponse {
   response: string;
@@ -10,7 +11,7 @@ export interface ChatbotResponse {
 export interface SessionData {
   sessionId: string;
   lastMessage: string;
-  context: string[];
+  context: ChatHistoryMessage[];
   createdAt: number;
 }
 
@@ -136,7 +137,13 @@ export class RedisService {
       const cached = await this.client.get(key);
       
       if (cached) {
-        return JSON.parse(cached) as SessionData;
+        const parsed = JSON.parse(cached) as Partial<SessionData> & { context?: unknown };
+        return {
+          sessionId: parsed.sessionId || sessionId,
+          lastMessage: parsed.lastMessage || '',
+          context: normalizeSessionContext(parsed.context),
+          createdAt: parsed.createdAt || Date.now(),
+        };
       }
       
       return null;
@@ -151,14 +158,15 @@ export class RedisService {
    */
   public async updateSessionContext(
     sessionId: string, 
-    context: string[], 
+    context: ChatHistoryMessage[], 
     ttl: number = 86400
   ): Promise<void> {
     try {
       const existingData = await this.getSessionData(sessionId);
       if (existingData) {
         existingData.context = context;
-        existingData.lastMessage = context[context.length - 1] || '';
+        const lastUserMessage = [...context].reverse().find((message) => message.role === 'user');
+        existingData.lastMessage = lastUserMessage?.content || '';
         await this.storeSessionData(existingData, ttl);
       }
     } catch (error) {

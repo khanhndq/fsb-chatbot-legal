@@ -65,6 +65,25 @@ export interface PipelineConfig {
   jsonOutputDir: string;
 }
 
+export interface AverageChunkLengthStats {
+  characters: number;
+  words: number;
+  estimatedTokens: number;
+}
+
+export interface DomainDistributionEntry {
+  domain: string;
+  count: number;
+  percentage: number;
+}
+
+export interface DomainDistributionStats {
+  basis: "linked_law_chunks";
+  totalLinkedLawChunks: number;
+  lawChunksWithoutLink: number;
+  domains: DomainDistributionEntry[];
+}
+
 /** Stats from the indexing pipeline */
 export interface PipelineStats {
   totalChunks: number;
@@ -74,4 +93,6 @@ export interface PipelineStats {
   embeddingsGenerated: number;
   vectorsUpserted: number;
   duration: number;
+  averageChunkLength: AverageChunkLengthStats;
+  domainDistribution: DomainDistributionStats;
 }

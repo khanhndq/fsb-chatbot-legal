@@ -5,7 +5,15 @@ import { ILLMProvider } from '../providers/llm-provider.interface';
 import { LLMFactory } from '../providers/llm-factory';
 import { chatbotTools, chatbotToolExecutor } from '../common/functions';
 import { config } from '../common/config';
-import { SYSTEM_PROMPT } from '../common/prompt';
+import { OPENAI_LEGAL_RETRIEVAL_PROMPT, SYSTEM_PROMPT } from '../common/prompt';
+import {
+  applyLegalSearchStrategy,
+  getMaxToolCallsForStrategy,
+  inferLegalSearchStrategy,
+  LegalSearchStrategy,
+} from './legal-search-policy';
+import { buildLegalAnswerPolicyPrompt } from './legal-question-policy';
+import { appendConversationTurn, ChatHistoryMessage } from './session-history';
 
 export interface SourceLink {
   title: string;
@@ -102,7 +110,7 @@ export class ChatbotService {
       }
 
       // Update session context
-      await this.updateSessionContext(sessionId, userMessage);
+      await this.updateSessionContext(sessionId, userMessage, botResponse);
 
       // Create chat message
       const chatMessage: ChatMessage = {
@@ -163,10 +171,22 @@ export class ChatbotService {
   /**
    * Create a wrapper around the tool executor that captures raw result strings.
    */
-  private createCapturingExecutor(): { executor: LLMToolExecutor; results: string[] } {
+  private createCapturingExecutor(searchStrategy?: LegalSearchStrategy): { executor: LLMToolExecutor; results: string[] } {
     const results: string[] = [];
+    let hasAppliedSearchPolicy = false;
     const executor: LLMToolExecutor = async (name, args) => {
-      const result = await chatbotToolExecutor(name, args);
+      const effectiveArgs = applyLegalSearchStrategy(
+        name,
+        args,
+        searchStrategy,
+        name === 'search_legal' && !hasAppliedSearchPolicy,
+      );
+
+      if (name === 'search_legal') {
+        hasAppliedSearchPolicy = true;
+      }
+
+      const result = await chatbotToolExecutor(name, effectiveArgs);
       results.push(result);
       return result;
     };
@@ -192,15 +212,24 @@ export class ChatbotService {
 
         // Use tools with required tool choice if enabled
         if (this.config.useTools) {
-          const messages = this.buildConversationHistory(context, userMessage);
-          const { executor, results } = this.createCapturingExecutor();
+          const searchStrategy = provider.providerName === 'openai'
+            ? inferLegalSearchStrategy(userMessage)
+            : undefined;
+          const answerPolicyPrompt = buildLegalAnswerPolicyPrompt(userMessage);
+          const messages = this.buildConversationHistory(
+            context,
+            userMessage,
+            provider.providerName === 'openai',
+            answerPolicyPrompt,
+          );
+          const { executor, results } = this.createCapturingExecutor(searchStrategy);
           const response = await provider.runWithTools(
             messages,
             chatbotTools,
             executor,
             {
               toolChoice: 'required',
-              maxToolCalls: 3
+              maxToolCalls: getMaxToolCallsForStrategy(searchStrategy),
             }
           );
 
@@ -215,7 +244,13 @@ export class ChatbotService {
         }
 
         // Regular chat without tools
-        const messages = this.buildConversationHistory(context, userMessage);
+        const answerPolicyPrompt = buildLegalAnswerPolicyPrompt(userMessage);
+        const messages = this.buildConversationHistory(
+          context,
+          userMessage,
+          provider.providerName === 'openai',
+          answerPolicyPrompt,
+        );
         const response = await provider.chat(messages);
 
         return {
@@ -263,8 +298,17 @@ export class ChatbotService {
 
         // Use streaming with tools if enabled
         if (this.config.useTools) {
-          const messages = this.buildConversationHistory(context, userMessage);
-          const { executor, results } = this.createCapturingExecutor();
+          const searchStrategy = provider.providerName === 'openai'
+            ? inferLegalSearchStrategy(userMessage)
+            : undefined;
+          const answerPolicyPrompt = buildLegalAnswerPolicyPrompt(userMessage);
+          const messages = this.buildConversationHistory(
+            context,
+            userMessage,
+            provider.providerName === 'openai',
+            answerPolicyPrompt,
+          );
+          const { executor, results } = this.createCapturingExecutor(searchStrategy);
 
           const result = await provider.streamChatWithTools(
             messages,
@@ -276,7 +320,7 @@ export class ChatbotService {
             },
             {
               toolChoice: 'required',
-              maxToolCalls: 3
+              maxToolCalls: getMaxToolCallsForStrategy(searchStrategy),
             }
           );
 
@@ -285,7 +329,13 @@ export class ChatbotService {
           sourceLinks = extracted.length > 0 ? extracted : undefined;
         } else {
           // Stream response without tools
-          const messages = this.buildConversationHistory(context, userMessage);
+          const answerPolicyPrompt = buildLegalAnswerPolicyPrompt(userMessage);
+          const messages = this.buildConversationHistory(
+            context,
+            userMessage,
+            provider.providerName === 'openai',
+            answerPolicyPrompt,
+          );
 
           const result = await provider.streamChat(
             messages,
@@ -311,7 +361,7 @@ export class ChatbotService {
       }
 
       // Update session context
-      await this.updateSessionContext(sessionId, userMessage);
+      await this.updateSessionContext(sessionId, userMessage, fullResponse);
 
       // Create chat message
       const chatMessage: ChatMessage = {
@@ -343,16 +393,28 @@ export class ChatbotService {
   /**
    * Build conversation history as LLMMessage array
    */
-  private buildConversationHistory(context: string[], userMessage: string): LLMMessage[] {
+  private buildConversationHistory(
+    context: ChatHistoryMessage[],
+    userMessage: string,
+    includeOpenAISearchPolicy: boolean = false,
+    answerPolicyPrompt?: string,
+  ): LLMMessage[] {
     const messages: LLMMessage[] = [
       { role: 'system', content: this.config.systemPrompt }
     ];
 
-    // Add context as previous messages (alternating user/assistant)
-    context.forEach((msg, index) => {
+    if (includeOpenAISearchPolicy) {
+      messages.push({ role: 'system', content: OPENAI_LEGAL_RETRIEVAL_PROMPT });
+    }
+
+    if (answerPolicyPrompt) {
+      messages.push({ role: 'system', content: answerPolicyPrompt });
+    }
+
+    context.forEach((msg) => {
       messages.push({
-        role: index % 2 === 0 ? 'user' : 'assistant',
-        content: msg
+        role: msg.role,
+        content: msg.content
       });
     });
 
@@ -374,7 +436,7 @@ export class ChatbotService {
    */
   private generateSimpleResponse(
     message: string,
-    context: string[]
+    context: ChatHistoryMessage[]
   ): { text: string; confidence: number } {
     const lowerMessage = message.toLowerCase().trim();
 
@@ -435,7 +497,7 @@ export class ChatbotService {
 
     // Context-aware responses
     if (context.length > 0) {
-      const lastMessage = context[context.length - 1].toLowerCase();
+      const lastMessage = context[context.length - 1].content.toLowerCase();
 
       if (this.matchesPattern(lowerMessage, ['what do you mean', 'explain', 'clarify'])) {
         return {
@@ -484,25 +546,25 @@ export class ChatbotService {
     return responses[Math.floor(Math.random() * responses.length)];
   }
 
-  private async updateSessionContext(sessionId: string, message: string): Promise<void> {
+  private async updateSessionContext(
+    sessionId: string,
+    userMessage: string,
+    botResponse: string,
+  ): Promise<void> {
     try {
       const sessionData = await this.redisService.getSessionData(sessionId);
-      let context: string[] = [];
-
-      if (sessionData) {
-        context = sessionData.context;
-      }
-
-      context.push(message);
-
-      if (context.length > this.config.maxContextLength) {
-        context = context.slice(-this.config.maxContextLength);
-      }
+      const context = sessionData?.context || [];
+      const nextContext = appendConversationTurn(
+        context,
+        userMessage,
+        botResponse,
+        this.config.maxContextLength,
+      );
 
       const newSessionData: SessionData = {
         sessionId,
-        lastMessage: message,
-        context,
+        lastMessage: userMessage,
+        context: nextContext,
         createdAt: sessionData?.createdAt || Date.now()
       };
 

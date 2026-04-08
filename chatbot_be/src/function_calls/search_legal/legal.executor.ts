@@ -1,125 +1,163 @@
 import { LLMToolExecutor as ToolExecutor } from "../../providers/types";
-import { Pinecone } from "@pinecone-database/pinecone";
-import OpenAI from "openai";
-import { LegalSearchResult, LegalSearchResponse } from "./legal.types";
+import {
+  RetrievedDocument,
+  retrieveHybrid,
+} from "../../retrieval";
+import {
+  extractLegalFocusTerms,
+  inferLegalQuestionProfile,
+} from "../../services/legal-question-policy";
+import { HYBRID_TOP_K, LAW_ONLY_TOP_K } from "../../services/legal-search-policy";
 
-/** Pinecone client singleton (lazy-initialized) */
-let pineconeClient: Pinecone | null = null;
-let openaiClient: OpenAI | null = null;
-
-function getPinecone(): Pinecone {
-  if (!pineconeClient) {
-    const apiKey = process.env.PINECONE_API_KEY;
-    if (!apiKey) {
-      throw new Error("PINECONE_API_KEY is not configured");
-    }
-    pineconeClient = new Pinecone({ apiKey });
-  }
-  return pineconeClient;
+function normalizeText(input: string): string {
+  return input
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, "d")
+    .toLowerCase()
+    .trim();
 }
 
-/**
- * OpenAI client used exclusively for generating query embeddings.
- * This is intentionally independent of the active LLM provider (config.llm.defaultProvider).
- * Reason: the Pinecone index was built with OpenAI text-embedding-3-small vectors.
- * Using a different embedding model at query time would produce incompatible vectors
- * and return low/meaningless similarity scores.
- * OPENAI_API_KEY must be set even when using Claude, Gemini, or Qwen as the LLM.
- */
-function getOpenAI(): OpenAI {
-  if (!openaiClient) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error("OPENAI_API_KEY is not configured");
-    }
-    openaiClient = new OpenAI({ apiKey });
+function trimEvidenceText(text: string, maxLength: number = 700): string {
+  if (text.length <= maxLength) {
+    return text;
   }
-  return openaiClient;
-}
 
-/**
- * Generate embedding for a query string.
- */
-async function embedQuery(query: string): Promise<number[]> {
-  const openai = getOpenAI();
-  const embeddingModel =
-    process.env.EMBEDDING_MODEL || "text-embedding-3-small";
-  const embeddingDimensions = parseInt(
-    process.env.EMBEDDING_DIMENSIONS || "1536",
-    10,
+  const candidate = text.slice(0, maxLength + 80);
+  const lastBoundary = Math.max(
+    candidate.lastIndexOf(". "),
+    candidate.lastIndexOf("; "),
+    candidate.lastIndexOf("\n"),
   );
 
-  const response = await openai.embeddings.create({
-    model: embeddingModel,
-    dimensions: embeddingDimensions,
-    input: query,
-  });
+  if (lastBoundary >= Math.floor(maxLength * 0.6)) {
+    return `${candidate.slice(0, lastBoundary + 1).trim()} ...`;
+  }
 
-  return response.data[0].embedding;
+  return `${text.slice(0, maxLength).trim()} ...`;
 }
 
-/**
- * Query Pinecone with a vector and optional filter.
- */
-async function queryPinecone(
-  vector: number[],
-  topK: number,
-  filter?: Record<string, unknown>,
-): Promise<LegalSearchResult[]> {
-  const pinecone = getPinecone();
-  const indexName = process.env.PINECONE_INDEX || "chatbot-vn-legal";
-  const index = pinecone.index(indexName);
+function getEvidenceIdentity(r: RetrievedDocument): string {
+  return [
+    r.sourceType,
+    r.documentName,
+    r.article || "",
+    r.section || "",
+    r.question || "",
+  ].join("::");
+}
 
-  const queryResult = await index.query({
-    vector,
-    topK,
-    includeMetadata: true,
-    filter,
+function getFocusMatchCount(text: string, focusTerms: string[]): number {
+  if (focusTerms.length === 0) {
+    return 0;
+  }
+
+  const normalizedText = normalizeText(text);
+  return focusTerms.reduce(
+    (count, term) => count + (normalizedText.includes(term) ? 1 : 0),
+    0,
+  );
+}
+
+function getEvidenceCaps(
+  query: string,
+  sourceType?: "law" | "precedent" | "faq",
+): { rag: number; cbr: number } {
+  const profile = inferLegalQuestionProfile(query);
+
+  if (sourceType === "precedent") {
+    return { rag: 0, cbr: profile.intent === "comparison" || profile.intent === "scenario" ? 2 : 1 };
+  }
+
+  if (sourceType === "law" || sourceType === "faq") {
+    if (profile.domain === "health_insurance" || profile.domain === "social_insurance") {
+      return { rag: 3, cbr: 0 };
+    }
+
+    if (profile.intent === "definition" || profile.intent === "rate" || profile.intent === "deadline") {
+      return { rag: 2, cbr: 0 };
+    }
+
+    return { rag: 3, cbr: 0 };
+  }
+
+  if (profile.domain === "health_insurance" || profile.domain === "social_insurance") {
+    return { rag: 3, cbr: 1 };
+  }
+
+  if (profile.intent === "comparison" || profile.intent === "scenario") {
+    return { rag: 3, cbr: 2 };
+  }
+
+  return { rag: 2, cbr: 1 };
+}
+
+function selectEvidence(
+  results: RetrievedDocument[],
+  focusTerms: string[],
+  limit: number,
+): RetrievedDocument[] {
+  if (limit <= 0) {
+    return [];
+  }
+
+  const ranked = [...results].sort((left, right) => {
+    const rightFocus = getFocusMatchCount(right.text, focusTerms);
+    const leftFocus = getFocusMatchCount(left.text, focusTerms);
+
+    if (rightFocus !== leftFocus) {
+      return rightFocus - leftFocus;
+    }
+
+    return right.score - left.score;
   });
 
-  return (queryResult.matches || []).map((match) => {
-    const meta = (match.metadata || {}) as Record<
-      string,
-      string | number | boolean
-    >;
-    return {
-      id: match.id,
-      score: match.score || 0,
-      text: (meta.text as string) || "",
-      source_type: (meta.source_type as "law" | "precedent" | "faq") || "law",
-      document_name: (meta.document_name as string) || "",
-      metadata: meta,
-    };
-  });
+  const selected: RetrievedDocument[] = [];
+  const seen = new Set<string>();
+
+  for (const result of ranked) {
+    const identity = getEvidenceIdentity(result);
+    if (seen.has(identity)) {
+      continue;
+    }
+
+    seen.add(identity);
+    selected.push(result);
+    if (selected.length >= limit) {
+      break;
+    }
+  }
+
+  return selected;
 }
 
 /**
  * Format a single result for the LLM response.
  */
-function formatResult(r: LegalSearchResult): Record<string, unknown> {
+function formatResult(r: RetrievedDocument, rank: number): Record<string, unknown> {
   const base: Record<string, unknown> = {
-    source_type: r.source_type,
-    document_name: r.document_name,
+    source_type: r.sourceType,
+    document_name: r.documentName,
     score: Math.round(r.score * 1000) / 1000,
-    text: r.text,
+    rank,
+    text: trimEvidenceText(r.text),
   };
 
   // Add source-specific metadata
-  if (r.metadata.article) base.article = r.metadata.article;
-  if (r.metadata.article_title) base.article_title = r.metadata.article_title;
-  if (r.metadata.chapter) base.chapter = r.metadata.chapter;
-  if (r.metadata.document_title)
-    base.document_title = r.metadata.document_title;
-  if (r.metadata.case_number) base.case_number = r.metadata.case_number;
-  if (r.metadata.court) base.court = r.metadata.court;
-  if (r.metadata.case_type) base.case_type = r.metadata.case_type;
-  if (r.metadata.section) base.section = r.metadata.section;
-  if (r.metadata.question) base.question = r.metadata.question;
-  if (r.metadata.link) base.link = r.metadata.link;
+  if (r.article) base.article = r.article;
+  if (r.articleTitle) base.article_title = r.articleTitle;
+  if (r.chapter) base.chapter = r.chapter;
+  if (r.documentTitle) base.document_title = r.documentTitle;
+  if (r.caseNumber) base.case_number = r.caseNumber;
+  if (r.court) base.court = r.court;
+  if (r.caseType) base.case_type = r.caseType;
+  if (r.section) base.section = r.section;
+  if (r.question) base.question = r.question;
+  if (r.link) base.link = r.link;
 
   // Construct link for precedents from document_name if no explicit link
-  if (!base.link && r.source_type === 'precedent' && r.document_name) {
-    const docPrefix = r.document_name.split('_')[0];
+  if (!base.link && r.sourceType === "precedent" && r.documentName) {
+    const docPrefix = r.documentName.split("_")[0];
     base.link = `https://anle.toaan.gov.vn/webcenter/ShowProperty?nodeId=/UCMServer/${docPrefix}`;
   }
 
@@ -134,77 +172,25 @@ function formatResult(r: LegalSearchResult): Record<string, unknown> {
  * Phase 1 — RAG: Search laws and FAQ for relevant legal provisions.
  * Returns factual legal text as ground truth.
  */
-async function ragSearch(
-  vector: number[],
-  topK: number,
-): Promise<LegalSearchResult[]> {
-  return queryPinecone(vector, topK, {
-    source_type: { $in: ["law", "faq"] },
-  });
-}
-
-/**
- * Phase 2 — CBR: Search precedents for similar court cases.
- * Returns case reasoning and decisions for analogical reasoning.
- */
-async function cbrSearch(
-  vector: number[],
-  topK: number,
-): Promise<LegalSearchResult[]> {
-  return queryPinecone(vector, topK, {
-    source_type: { $eq: "precedent" },
-  });
-}
-
-/**
- * Combined CBR + RAG search.
- *
- * Executes both searches in parallel and returns structured results
- * with clear separation between legal provisions (RAG) and case
- * precedents (CBR).
- */
 async function searchLegalCBRRAG(
   query: string,
-  sourceType?: string,
-  topK: number = 5,
+  sourceType?: "law" | "precedent" | "faq",
+  topK: number = HYBRID_TOP_K,
 ): Promise<{
-  rag_results: LegalSearchResult[];
-  cbr_results: LegalSearchResult[];
+  rag_results: RetrievedDocument[];
+  cbr_results: RetrievedDocument[];
   total: number;
 }> {
-  topK = Math.min(Math.max(topK, 1), 10);
-
-  // Embed the query once
-  const queryVector = await embedQuery(query);
-
-  // If user explicitly filters by source type, do a single search
-  if (sourceType === "law" || sourceType === "faq") {
-    const results = await queryPinecone(queryVector, topK, {
-      source_type: { $eq: sourceType },
-    });
-    console.log("RAG results: ", results);
-    return { rag_results: results, cbr_results: [], total: results.length };
-  }
-
-  if (sourceType === "precedent") {
-    const results = await queryPinecone(queryVector, topK, {
-      source_type: { $eq: "precedent" },
-    });
-    console.log("CBR results: ", results);
-    return { rag_results: [], cbr_results: results, total: results.length };
-  }
-
-  // Default: Execute both RAG and CBR in parallel
-  const [ragResults, cbrResults] = await Promise.all([
-    ragSearch(queryVector, topK),
-    cbrSearch(queryVector, Math.min(topK, 3)), // Fewer precedents (they're longer)
-  ]);
-  console.log("RAG results: ", ragResults);
-  console.log("CBR results: ", cbrResults);
+  const { lawResults, precedentResults, total } = await retrieveHybrid(query, {
+    topK,
+    sourceType,
+  });
+  console.log("RAG results: ", lawResults);
+  console.log("CBR results: ", precedentResults);
   return {
-    rag_results: ragResults,
-    cbr_results: cbrResults,
-    total: ragResults.length + cbrResults.length,
+    rag_results: lawResults,
+    cbr_results: precedentResults,
+    total,
   };
 }
 
@@ -225,8 +211,12 @@ export const legalToolExecutor: ToolExecutor = async (
 ): Promise<string> => {
   if (name === "search_legal") {
     const query = args.query as string;
-    const sourceType = args.source_type as string | undefined;
-    const topK = (args.top_k as number) || 5;
+    const originalQuery = (args.original_query as string) || query;
+    const sourceType = args.source_type as "law" | "precedent" | "faq" | undefined;
+    const defaultTopK = sourceType === "law" || sourceType === "faq"
+      ? LAW_ONLY_TOP_K
+      : HYBRID_TOP_K;
+    const topK = (args.top_k as number) || defaultTopK;
 
     console.log(
       `🔍 [CBR+RAG] Searching legal KB for: "${query}"` +
@@ -239,6 +229,19 @@ export const legalToolExecutor: ToolExecutor = async (
         query,
         sourceType,
         topK,
+      );
+      const focusTerms = extractLegalFocusTerms(originalQuery);
+      const profile = inferLegalQuestionProfile(originalQuery);
+      const evidenceCaps = getEvidenceCaps(originalQuery, sourceType);
+      const selectedRagResults = selectEvidence(
+        rag_results,
+        focusTerms,
+        evidenceCaps.rag,
+      );
+      const selectedCbrResults = selectEvidence(
+        cbr_results,
+        focusTerms,
+        evidenceCaps.cbr,
       );
 
       if (total === 0) {
@@ -253,23 +256,34 @@ export const legalToolExecutor: ToolExecutor = async (
       const response: Record<string, unknown> = {
         found: true,
         strategy: "CBR+RAG",
+        answer_focus: {
+          intent: profile.intent,
+          domain: profile.domain,
+          original_query: originalQuery,
+          rewritten_query: query,
+          focus_terms: focusTerms,
+          instruction:
+            "Ưu tiên dùng các kết quả theo đúng thứ tự rank. Chỉ dùng kết quả sau để bổ sung điều kiện còn thiếu, không gộp mọi chi tiết nếu không cần cho câu hỏi.",
+        },
       };
 
       // RAG section: legal provisions
-      if (rag_results.length > 0) {
+      if (selectedRagResults.length > 0) {
         response.legal_provisions = {
-          description: "Các điều luật và quy định pháp luật liên quan (RAG)",
-          count: rag_results.length,
-          results: rag_results.map(formatResult),
+          description: "Các điều luật và quy định pháp luật liên quan đã được rút gọn theo mức độ phù hợp (RAG)",
+          count: selectedRagResults.length,
+          retrieved_count: rag_results.length,
+          results: selectedRagResults.map((result, index) => formatResult(result, index + 1)),
         };
       }
 
       // CBR section: case precedents
-      if (cbr_results.length > 0) {
+      if (selectedCbrResults.length > 0) {
         response.case_precedents = {
-          description: "Các bản án và án lệ tương tự để suy luận (CBR)",
-          count: cbr_results.length,
-          results: cbr_results.map(formatResult),
+          description: "Các bản án và án lệ tương tự đã được rút gọn theo mức độ phù hợp (CBR)",
+          count: selectedCbrResults.length,
+          retrieved_count: cbr_results.length,
+          results: selectedCbrResults.map((result, index) => formatResult(result, index + 1)),
         };
       }
 

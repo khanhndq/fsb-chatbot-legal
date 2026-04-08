@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { formatDistanceToNow, isToday, isYesterday, isWithinInterval, subDays } from "date-fns";
+import { vi } from "date-fns/locale";
 import { ChatSession } from "../types/chat";
 
 interface SessionSidebarProps {
@@ -54,7 +55,7 @@ const SessionItem: React.FC<{
   onDelete: () => void;
 }> = ({ session, isActive, onSelect, onDelete }) => {
   const date = session.last_activity ? new Date(session.last_activity) : new Date(session.created_at);
-  const timeAgo = formatDistanceToNow(date, { addSuffix: true });
+  const timeAgo = formatDistanceToNow(date, { addSuffix: true, locale: vi });
   const preview = session.preview
     ? truncate(session.preview, 45)
     : truncate(session.id, 20);

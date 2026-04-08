@@ -18,6 +18,7 @@ import * as fs from "fs";
 import * as path from "path";
 import OpenAI from "openai";
 import { Pinecone } from "@pinecone-database/pinecone";
+import { calculateChunkAnalysis } from "./chunk-analysis";
 import { parseAllLaws, parseAllPrecedents, parseAllFAQs } from "./parsers";
 import { Chunk, PipelineConfig, PipelineStats } from "./types";
 
@@ -383,6 +384,7 @@ async function main(): Promise<void> {
   console.log("");
 
   // ── Stats tracking ──────────────────────────────────────────────────
+  const chunkAnalysis = calculateChunkAnalysis(allChunks, lawsSourceDir);
   const stats: PipelineStats = {
     totalChunks: allChunks.length,
     lawChunks: lawChunks.length,
@@ -391,6 +393,8 @@ async function main(): Promise<void> {
     embeddingsGenerated: 0,
     vectorsUpserted: 0,
     duration: 0,
+    averageChunkLength: chunkAnalysis.averageChunkLength,
+    domainDistribution: chunkAnalysis.domainDistribution,
   };
 
   if (config.dryRun) {
@@ -449,6 +453,22 @@ async function main(): Promise<void> {
   console.log("  ✅ Pipeline Complete!");
   console.log("═══════════════════════════════════════════════════════");
   console.log(`  Total chunks:        ${stats.totalChunks}`);
+  console.log(
+    `  Avg chunk length:    ${stats.averageChunkLength.characters} chars | ${stats.averageChunkLength.words} words | ~${stats.averageChunkLength.estimatedTokens} tokens`,
+  );
+  if (stats.domainDistribution.domains.length > 0) {
+    console.log("  Domain distribution: % of linked law chunks");
+    for (const domain of stats.domainDistribution.domains) {
+      console.log(
+        `    - ${domain.domain}: ${domain.percentage}% (${domain.count} chunks)`,
+      );
+    }
+  }
+  if (stats.domainDistribution.lawChunksWithoutLink > 0) {
+    console.log(
+      `  Missing law links:   ${stats.domainDistribution.lawChunksWithoutLink} chunks`,
+    );
+  }
   console.log(`  Embeddings created:  ${stats.embeddingsGenerated}`);
   console.log(`  Vectors upserted:    ${stats.vectorsUpserted}`);
   console.log(`  Duration:            ${stats.duration.toFixed(1)}s`);

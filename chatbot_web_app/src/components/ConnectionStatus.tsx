@@ -16,7 +16,7 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
       case 'connected':
         return {
           icon: 'check_circle',
-          text: 'Connected',
+          text: 'Đã kết nối',
           color: 'text-green-600 dark:text-green-400',
           bgColor: 'bg-green-50 dark:bg-green-900/20',
           borderColor: 'border-green-200 dark:border-green-700'
@@ -24,7 +24,7 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
       case 'connecting':
         return {
           icon: 'sync',
-          text: 'Connecting...',
+          text: 'Đang kết nối...',
           color: 'text-yellow-600 dark:text-yellow-400',
           bgColor: 'bg-yellow-50 dark:bg-yellow-900/20',
           borderColor: 'border-yellow-200 dark:border-yellow-700',
@@ -33,7 +33,7 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
       case 'disconnected':
         return {
           icon: 'cancel',
-          text: 'Disconnected',
+          text: 'Mất kết nối',
           color: 'text-red-600 dark:text-red-400',
           bgColor: 'bg-red-50 dark:bg-red-900/20',
           borderColor: 'border-red-200 dark:border-red-700'
@@ -41,7 +41,7 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
       case 'error':
         return {
           icon: 'error',
-          text: 'Error',
+          text: 'Lỗi',
           color: 'text-red-600 dark:text-red-400',
           bgColor: 'bg-red-50 dark:bg-red-900/20',
           borderColor: 'border-red-200 dark:border-red-700'
@@ -49,7 +49,7 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
       default:
         return {
           icon: 'help',
-          text: 'Unknown',
+          text: 'Không xác định',
           color: 'text-slate-600 dark:text-slate-400',
           bgColor: 'bg-slate-50 dark:bg-slate-800',
           borderColor: 'border-slate-200 dark:border-slate-700'
@@ -73,7 +73,7 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
           onClick={onReconnect}
           className="ml-2 px-2 py-0.5 text-xs bg-primary text-white rounded-md hover:bg-orange-600 transition-colors duration-200"
         >
-          Reconnect
+          Kết nối lại
         </button>
       )}
       

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import Chat from "./components/Chat";
 import SessionSidebar from "./components/SessionSidebar";
 import { v4 as uuidv4 } from "uuid";
@@ -129,7 +128,7 @@ function App() {
         }}
       >
         <SessionSidebar
-          sessions={sessions}
+          sessions={sessions.filter(s => s.id === activeSessionId || (s.message_count && s.message_count > 0))}
           activeSessionId={activeSessionId}
           onSessionSelect={handleSessionSelect}
           onNewChat={handleNewChat}
@@ -152,10 +151,6 @@ function App() {
           )}
         </div>
       </div>
-
-      {process.env.NODE_ENV === "development" && (
-        <ReactQueryDevtools initialIsOpen={false} />
-      )}
     </QueryClientProvider>
   );
 }

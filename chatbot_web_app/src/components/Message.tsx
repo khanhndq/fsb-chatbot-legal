@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatMessage, SourceLink } from '../types/chat';
 import { formatDistanceToNow } from 'date-fns';
+import { vi } from 'date-fns/locale';
 
 interface MessageProps {
   message: ChatMessage;
@@ -20,9 +21,9 @@ const Message: React.FC<MessageProps> = ({
 
   const formatTimestamp = (timestamp: Date) => {
     try {
-      return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
+      return formatDistanceToNow(new Date(timestamp), { addSuffix: true, locale: vi });
     } catch {
-      return 'Just now';
+      return 'Vừa xong';
     }
   };
 
@@ -182,7 +183,7 @@ const Message: React.FC<MessageProps> = ({
         <div className='flex justify-end mb-4'>
           <div className='max-w-xs lg:max-w-2xl px-5 py-3 rounded-2xl bg-primary text-white shadow-md'>
             <div className='mb-1'>
-              <p className='text-xs font-semibold mb-1 opacity-90'>You</p>
+              <p className='text-xs font-semibold mb-1 opacity-90'>Bạn</p>
               <p className='text-sm leading-relaxed'>{message.user_message}</p>
             </div>
             <div className='text-xs opacity-70 mt-2'>
@@ -197,7 +198,7 @@ const Message: React.FC<MessageProps> = ({
             <div className='flex-shrink-0 w-8 h-8 rounded-full overflow-hidden shadow-md ring-2 ring-white dark:ring-slate-700'>
               <img
                 src='/avatar.png'
-                alt='VietLegal Assistant'
+                alt='Trợ lý VietLegal'
                 className='w-full h-full object-cover'
               />
             </div>
